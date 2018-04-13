@@ -15,7 +15,8 @@ import logging
 FLAGS = tf.app.flags.FLAGS
 
 order = [15, 12, 25, 26, 27, 17, 18, 19, 1, 2, 3, 6, 7, 8]
-
+#order = [15, 12, 17, 18, 19, 25, 26, 27, 6, 7, 8, 1, 2, 3]
+#order = [15, 12, 25, 18, 19, 17, 26, 27, 1, 7, 8, 6, 2, 3]
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -24,8 +25,8 @@ def show_anim_curves(anim_dict, _plt):
     for o in range(0,36,2):
         x = val[:,o]
         y = val[:,o+1]
-        _plt.plot(x, 'r--', linewidth=0.2)
-        _plt.plot(y, 'g', linewidth=0.2)
+        _plt.plot(x, 'r--', linewidth=0.5)
+        _plt.plot(y, 'g', linewidth=0.5)
     return _plt
 
 def read_openpose_json(smooth=True, *args):
@@ -37,7 +38,9 @@ def read_openpose_json(smooth=True, *args):
     #load json files
     json_files = os.listdir(openpose_output_dir)
     # check for other file types
-    json_files = sorted([filename for filename in json_files if filename.endswith(".json")])
+    
+    #.txt 파일만 순서대로 가져오기
+    json_files = sorted([filename for filename in json_files if filename.endswith(".txt")])
     cache = {}
     smoothed = {}
     ### extract x,y and ignore confidence score
@@ -45,25 +48,39 @@ def read_openpose_json(smooth=True, *args):
         logger.debug("reading {0}".format(file_name))
         _file = os.path.join(openpose_output_dir, file_name)
         if not os.path.isfile(_file): raise Exception("No file found!!, {0}".format(_file))
-        data = json.load(open(_file))
+        
+        #data = json.load(open(_file))
         #take first person
-        _data = data["people"][0]["pose_keypoints"]
-        xy = []
+        #_data = data["people"][0]["pose_keypoints"]
+        
+        #텍스트 파일에서 읽어오기
+        data = open(_file)
+        _data=[float(num) for num in data.read().split()]
+        
+      
+        xy=_data
+        #xy = []
+        #c점수 없으니까 이 코드는 통채로 무시
         #ignore confidence score
-        for o in range(0,len(_data),3):
-            xy.append(_data[o])
-            xy.append(_data[o+1])
-
+        #for o in range(0,len(_data),2):
+        #    xy.append(_data[o])
+       #     xy.append(_data[o+1])
+        print(_file)
+        print(xy)
         # get frame index from openpose 12 padding
         frame_indx = re.findall("(\d+)", file_name)
         logger.debug("found {0} for frame {1}".format(xy, str(int(frame_indx[0]))))
         #add xy to frame
+        print(int(frame_indx[0]))
         cache[int(frame_indx[0])] = xy
     plt.figure(1)
     drop_curves_plot = show_anim_curves(cache, plt)
     pngName = 'png/dirty_plot.png'
     drop_curves_plot.savefig(pngName)
 
+    
+    smooth = False
+    
     # exit if no smoothing
     if not smooth:
         # return frames cache incl. 18 joints (x,y)
@@ -180,11 +197,9 @@ def main(_):
     train_set_3d, test_set_3d, data_mean_3d, data_std_3d, dim_to_ignore_3d, dim_to_use_3d, train_root_positions, test_root_positions = data_utils.read_3d_data(
         actions, FLAGS.data_dir, FLAGS.camera_frame, rcams, FLAGS.predict_14)
 
-    device_count = {"GPU": 1}
+    device_count = {"GPU": 0}
     png_lib = []
-    with tf.Session(config=tf.ConfigProto(
-            device_count=device_count,
-            allow_soft_placement=True)) as sess:
+    with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as sess:
         #plt.figure(3)
         batch_size = 128
         model = create_model(sess, actions, batch_size)
@@ -253,18 +268,21 @@ def main(_):
 
             # Plot 3d predictions
             ax = plt.subplot(gs1[subplot_idx - 1], projection='3d')
-            ax.view_init(18, -70)    
+            #ax.view_init(18, -70)    
+            ax.view_init(20, -80)
             logger.debug(np.min(poses3d))
             if np.min(poses3d) < -1000:
                 poses3d = before_pose
 
             p3d = poses3d
             logger.debug(poses3d)
-            viz.show3Dpose(p3d, ax, lcolor="#9b59b6", rcolor="#2ecc71")
+            viz.show3Dpose(p3d, ax, lcolor="#4c85c5", rcolor="#4c85c5")
+            #왼쪽 빨간색, 오른쪽 파랑색
 
             pngName = 'png/test_{0}.png'.format(str(frame))
             plt.savefig(pngName)
             png_lib.append(imageio.imread(pngName))
+            
             before_pose = poses3d
 
 
@@ -283,6 +301,7 @@ if __name__ == "__main__":
              3:logging.DEBUG}
 
     logger.setLevel(level[FLAGS.verbose])
+
 
 
     tf.app.run()
